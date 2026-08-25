@@ -24,18 +24,14 @@ end
 -- ===== PERSISTENCIA DE KEY (writefile/readfile) =====
 local function save_key_to_disk(key)
     local ok = false
-    -- Tenta writefile (disponível na maioria dos executores)
     ok = pcall(function()
-        -- Cria pasta se necessário
         local mk = makefolder and pcall(makefolder, "RedOnyxHub")
         writefile(KEY_FILE, key)
     end)
     if not ok then
-        -- Fallback: tenta no diretório padrão
         ok = pcall(function() writefile(KEY_FILE, key) end)
     end
     if not ok then
-        -- Fallback final: tenta syn.writefile
         ok = pcall(function()
             if syn and syn.writefile then
                 syn.writefile(KEY_FILE, key)
@@ -50,10 +46,8 @@ end
 
 local function load_key_from_disk()
     local key = ""
-    -- Tenta readfile
     local ok = pcall(function() key = readfile(KEY_FILE) end)
     if not ok then
-        -- Fallback syn.readfile
         ok = pcall(function()
             if syn and syn.readfile then
                 key = syn.readfile(KEY_FILE)
@@ -99,6 +93,16 @@ local function http_get(url, timeout)
     local done = false
     local t0 = tick()
 
+    -- Tenta primeiro com syn.request (mais compatível)
+    local req = type(syn) == "table" and syn.request or request or http_request
+    if req then
+        local ok, resp = pcall(req, { Url = url, Method = "GET" })
+        if ok and resp and resp.StatusCode == 200 and type(resp.Body) == "string" and #resp.Body > 0 then
+            return resp.Body
+        end
+    end
+
+    -- Fallback para game:HttpGet
     spawnF(function()
         local ok, data = pcall(function() return game:HttpGet(url) end)
         if ok then result = data end
@@ -111,14 +115,6 @@ local function http_get(url, timeout)
 
     if done and type(result) == "string" and #result > 0 then
         return result
-    end
-
-    local req = type(syn) == "table" and syn.request or request or http_request
-    if req then
-        local ok, resp = pcall(req, { Url = url, Method = "GET" })
-        if ok and resp and resp.StatusCode == 200 and type(resp.Body) == "string" and #resp.Body > 0 then
-            return resp.Body
-        end
     end
 
     return ""
@@ -239,12 +235,9 @@ local function load_hub(url, status_cb)
 end
 
 -- ===== FUNÇÃO PRINCIPAL DE CARREGAMENTO =====
--- Usada tanto pelo free quanto pelo premium
 local function execute_hub(is_premium, key, ui_to_destroy)
-    -- Inicializa configuracoes primeiro
     init_auto_farm_settings()
 
-    -- Se for premium, salva a key e tenta carregar premium
     if is_premium and key and key ~= "" then
         set_script_key(key)
         save_key_to_disk(key)
@@ -259,11 +252,9 @@ local function execute_hub(is_premium, key, ui_to_destroy)
             return true
         else
             warn("[Red Onyx Hub] Erro no premium: " .. err .. " - tentando free...")
-            -- Fallback: tenta free
         end
     end
 
-    -- Carrega free (QuantumOnyx.lua original com as settings ativas)
     local ok, err = load_hub(MAIN_URL)
     if ok then
         print("[Red Onyx Hub] Hub carregado com sucesso!")
@@ -290,14 +281,12 @@ local function create_key_ui()
         pcall(function() sg.Parent = gethui() end)
     end
 
-    -- Tenta carregar key salva ANTES de mostrar UI
     local saved_key = load_key_from_disk()
     if saved_key ~= "" then
         print("[Red Onyx Hub] Key salva encontrada! Validando...")
         spawnF(function()
             local ok_load = execute_hub(true, saved_key, sg)
             if not ok_load then
-                -- Key salva nao funcionou, mostra UI
                 warn("[Red Onyx Hub] Key salva invalida, mostrando UI")
                 delete_key_from_disk()
                 create_key_ui_real(sg, saved_key)
@@ -306,12 +295,10 @@ local function create_key_ui()
         return
     end
 
-    -- Mostra UI normal
     create_key_ui_real(sg, "")
 end
 
 local function create_key_ui_real(sg, initial_key)
-    -- Card principal
     local card = Instance.new("Frame")
     card.Size = UDim2.new(0, 420, 0, 250)
     card.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -331,7 +318,6 @@ local function create_key_ui_real(sg, initial_key)
     us.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     us.Parent = card
 
-    -- Titulo
     local titulo = Instance.new("TextLabel")
     titulo.Size = UDim2.new(1, 0, 0, 38)
     titulo.Position = UDim2.new(0, 0, 0, 16)
@@ -356,7 +342,6 @@ local function create_key_ui_real(sg, initial_key)
     subtitulo.ZIndex = 3
     subtitulo.Parent = card
 
-    -- Input
     local input = Instance.new("TextBox")
     input.Size = UDim2.new(0, 360, 0, 34)
     input.Position = UDim2.new(0.5, 0, 0, 82)
@@ -404,7 +389,6 @@ local function create_key_ui_real(sg, initial_key)
 
     local busy = false
 
-    -- Validar key e carregar
     local function validate_and_load(k, is_free)
         if busy then return end
         busy = true
@@ -414,7 +398,7 @@ local function create_key_ui_real(sg, initial_key)
             spawnF(function()
                 local ok, err = execute_hub(false, nil, sg)
                 if ok then
-                    -- sg foi destruido em execute_hub
+                    -- sg destruido
                 else
                     busy = false
                     set_status("Erro: " .. tostring(err), RED_T)
@@ -423,7 +407,6 @@ local function create_key_ui_real(sg, initial_key)
             return
         end
 
-        -- Premium
         if not k or k == "" then
             busy = false
             set_status("Digite uma key primeiro.", RED_T)
@@ -432,7 +415,6 @@ local function create_key_ui_real(sg, initial_key)
 
         set_status("Validando key...", RED_T)
         spawnF(function()
-            -- Baixa SDK
             local code = http_get("https://sdkapi-public.luarmor.net/library.lua")
             if #code == 0 then
                 busy = false
@@ -461,18 +443,15 @@ local function create_key_ui_real(sg, initial_key)
                 set_status("Key valida! Carregando...", RED_T)
                 waitF(0.3)
 
-                -- SALVA a key em disco AGORA
                 save_key_to_disk(k)
                 set_script_key(k)
 
-                -- Carrega o hub (tenta premium, fallback free)
                 local ok_load = execute_hub(true, k, sg)
                 if ok_load then
-                    -- sg destruido em execute_hub
+                    -- sg destruido
                 else
                     busy = false
                     set_status("Erro ao carregar hub", RED_T)
-                    -- Nao deleta a key salva - ela e valida, o problema e o download
                 end
             else
                 busy = false
@@ -481,13 +460,11 @@ local function create_key_ui_real(sg, initial_key)
                     msg = tostring(result.message or result.code)
                 end
                 set_status(msg, RED_T)
-                -- Key invalida: deleta do disco se estava la
                 delete_key_from_disk()
             end
         end)
     end
 
-    -- Criar botao
     local function make_button(pos_x, color, label, callback)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0, 112, 0, 32)
