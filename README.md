@@ -1,527 +1,621 @@
 -- ============================================================
--- RED ONYX HUB v16 - COMPLETO + ANTI-TRAVAMENTO
--- Patcher vermelho/preto funcional | Auto Pega Tudo | Key salva
+-- RED ONYX PROJECT - BIBLIOTECA + HUB COMPLETO
+-- 100% autônomo | Zero download | Design futurista
 -- ============================================================
-print("[Red Onyx Hub] v16 iniciando...")
+print("[Red Onyx Project] Iniciando...")
+
+-- ===== SERVIÇOS =====
+local Jogadores      = game:GetService("Players")
+local UserInput      = game:GetService("UserInputService")
+local TweenService   = game:GetService("TweenService")
+local RunService     = game:GetService("RunService")
+local ContextAction  = game:GetService("ContextActionService")
+
+local Jogador = Jogadores.LocalPlayer
 
 -- ===== COMPAT =====
 local aguardar = (task and task.wait) or wait
-local spawn = (task and task.spawn) or function(f) coroutine.resume(coroutine.create(f)) end
-local GENV = _G
-pcall(function() local ok, e = pcall(getgenv); if ok then GENV = e end end)
+local spawn    = (task and task.spawn) or function(f) coroutine.resume(coroutine.create(f)) end
 
--- ===== PALETA (vermelho e preto) =====
-local VERM   = Color3.fromRGB(200, 30, 45)
-local VERM_C = Color3.fromRGB(240, 80, 90)
-local VERM_E = Color3.fromRGB(130, 15, 28)
-local ESC    = Color3.fromRGB(15, 12, 14)
-local ESC_M  = Color3.fromRGB(22, 16, 18)
-local CIN_M  = Color3.fromRGB(30, 22, 25)
-local BRA    = Color3.fromRGB(240, 235, 237)
-local CIN    = Color3.fromRGB(150, 140, 142)
-
--- ===== CONSTANTES =====
-local SCRIPT_ID = "0ae9fe4cf963e3a13d25eed0e2ce5940"
-local URL_FREE = "https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"
-local URL_PREMIUM = "https://api.luarmor.net/files/v4/loaders/" .. SCRIPT_ID .. ".lua"
-local LINK_KEY = "https://ads.luarmor.net/get_key?for=Quantum_Onyx_Keysytem-NdUqNPMGBobv"
-local ARQ_KEY = "RedOnyxKey.txt"
-local TAG = "ROXThemed" -- atributo que marca objetos já tematizados (ANTI-LOOP)
-
-local Core = game:GetService("CoreGui")
-local Jogadores = game:GetService("Players")
-local Jogador = Jogadores.LocalPlayer
+-- ===== PALETA =====
+local VERM   = Color3.fromRGB(225, 25, 45)
+local VERM_C = Color3.fromRGB(255, 90, 105)
+local VERM_E = Color3.fromRGB(115, 12, 26)
+local NEON   = Color3.fromRGB(255, 40, 60)
+local PRETO  = Color3.fromRGB(10, 8, 10)
+local FUNDO  = Color3.fromRGB(16, 12, 14)
+local PAINEL = Color3.fromRGB(24, 17, 20)
+local CARD   = Color3.fromRGB(28, 20, 24)
+local BRA    = Color3.fromRGB(245, 240, 242)
+local CIN    = Color3.fromRGB(150, 140, 145)
 
 -- ============================================================
--- PATCHER VERMELHO/PRETO — FUNCIONAL E SEM TRAVAR
--- Estratégia: marca cada objeto com atributo. Objeto marcado
--- NUNCA é processado de novo. Isso elimina o loop de feedback
--- com o sistema de tema do hub (causa real do freeze).
+-- BIBLIOTECA RED ONYX (RedOnyxLib)
 -- ============================================================
-local patcher_habilitado = true
+local RedOnyxLib = {}
+RedOnyxLib.__index = RedOnyxLib
 
-local function aplicar_tema(obj)
-    if not patcher_habilitado then return end
-    -- ANTI-LOOP: se já foi tematizado, ignora. Sem isso = repaint infinito = freeze
-    local ok, ja_feito = pcall(function() return obj:GetAttribute(TAG) end)
-    if ok and ja_feito then return end
+-- Config central (os loops de farm leem daqui)
+RedOnyxLib.Config = {
+    AutoFarm      = false,
+    AutoColeta    = false,
+    AutoBaus      = false,
+    AutoQuest     = false,
+    DistanciaFarm = 200,
+}
 
-    pcall(function()
-        obj:SetAttribute(TAG, true)
-
-        if obj:IsA("GuiObject") then
-            local bg = obj.BackgroundColor3
-            local lum = bg.R * 0.299 + bg.G * 0.587 + bg.B * 0.114
-            if lum < 0.15 then obj.BackgroundColor3 = ESC
-            elseif lum < 0.25 then obj.BackgroundColor3 = ESC_M
-            elseif lum < 0.35 then obj.BackgroundColor3 = CIN_M
-            else obj.BackgroundColor3 = Color3.fromRGB(42, 30, 35) end
-            obj.BorderColor3 = VERM_E
-        end
-        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-            obj.TextColor3 = BRA
-            local t = obj.Text
-            if type(t) == "string" and t ~= "" then
-                local tl = t:lower()
-                if tl:find("quantum") or tl:find("kaitun") or tl:find("k https") then
-                    obj.Text = t:gsub("[Qq]uantum%s*[Oo]nyx", "Red Onyx Hub"):gsub("[Kk]aitun", "Red Onyx Hub")
-                end
-            end
-        end
-        if obj:IsA("TextBox") then
-            obj.TextColor3 = BRA
-            obj.PlaceholderColor3 = CIN
-        end
-        if obj:IsA("UIStroke") then
-            obj.Color = VERM
-        end
-        if obj:IsA("ScrollingFrame") then
-            obj.ScrollBarImageColor3 = VERM_C
-        end
-        if obj:IsA("UIGradient") then
-            obj.Color = ColorSequence.new(ESC_M, VERM_E)
-        end
-        -- Imagens: NÃO mexemos em ImageColor3 para não escurecer logos
-    end)
+-- ---------- helpers visuais ----------
+local function novo(classe, props, pai)
+    local obj = Instance.new(classe)
+    for k, v in pairs(props) do
+        obj[k] = v
+    end
+    obj.Parent = props.Parent
+    return obj
 end
 
--- GUIs que o patcher DEVE ignorar (nossa UI e GUIs do jogo)
-local gui_ignorada = {}
-
-local function nome_deve_patchear(gui)
-    local n = gui.Name:lower()
-    if gui_ignorada[gui] then return false end
-    -- Só tematiza GUIs que parecem ser do hub
-    return n:find("hub") or n:find("quantum") or n:find("onyx") or n:find("kaitun")
-        or n:find("ui", 1, true) or n:find("lib", 1, true) or n:find("red")
+local function canto(pai, raio)
+    return novo("UICorner", { CornerRadius = UDim.new(0, raio or 8), Parent = pai })
 end
 
--- Detecção de novas GUIs por evento (leve) + pass único com debounce
-local function iniciar_patcher()
-    spawn(function()
-        aguardar(2)
-        -- Pass inicial: tematiza GUIs do hub que já existem
+local function borda(pai, cor, espessura, transp)
+    return novo("UIStroke", {
+        Color = cor or VERM,
+        Thickness = espessura or 1,
+        Transparency = transparencia or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Parent = pai,
+    })
+end
+
+local function gradiente(pai, c1, c2)
+    return novo("UIGradient", {
+        Color = ColorSequence.new(c1, c2),
+        Rotation = 90,
+        Parent = pai,
+    })
+end
+
+-- ---------- JANELA ----------
+function RedOnyxLib.criar_janela(cfg)
+    cfg = cfg or {}
+
+    local sg = novo("ScreenGui", {
+        Name = "RedOnyxProject",
+        IgnoreGuiInset = true,
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    })
+
+    local ok_pai = pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    if not ok_pai then
         pcall(function()
-            for _, gui in ipairs(Core:GetChildren()) do
-                if gui:IsA("ScreenGui") and nome_deve_patchear(gui) then
-                    for _, obj in ipairs(gui:GetDescendants()) do
-                        aplicar_tema(obj)
-                    end
-                end
+            if gethui then
+                local hui = gethui()
+                if typeof(hui) == "Instance" then sg.Parent = hui end
             end
         end)
+    end
 
-        -- Evento: nova GUI/objeto aparece → tematiza (com debounce leve)
-        pcall(function()
-            Core.ChildAdded:Connect(function(child)
-                aguardar(1) -- espera a GUI terminar de construir
-                if child:IsA("ScreenGui") and nome_deve_patchear(child) then
-                    for _, obj in ipairs(child:GetDescendants()) do
-                        aplicar_tema(obj)
+    -- Janela
+    local janela = novo("Frame", {
+        Name = "Janela",
+        Size = UDim2.new(0, 460, 0, 320),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundColor3 = FUNDO,
+        BorderSizePixel = 0,
+        Parent = sg,
+    })
+    canto(janela, 12)
+    local stroke_janela = novo("UIStroke", { Color = VERM_E, Thickness = 1.5, Parent = janela })
+
+    -- Glow futurista (stroke animado)
+    spawn(function()
+        while janela.Parent do
+            local tw = TweenService:Create(stroke_janela, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                Color = NEON, Transparency = 0.15
+            })
+            tw:Play()
+            tw.Completed:Wait()
+            if not janela.Parent then break end
+            local tw2 = TweenService:Create(stroke_janela, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                Color = VERM_E, Transparency = 0.4
+            })
+            tw2:Play()
+            tw2.Completed:Wait()
+        end
+    end)
+
+    -- Header com gradiente
+    local header = novo("Frame", {
+        Name = "Header",
+        Size = UDim2.new(1, 0, 0, 46),
+        BackgroundColor3 = PAINEL,
+        BorderSizePixel = 0,
+        Parent = janela,
+    })
+    canto(header, 12)
+    gradiente(header, Color3.fromRGB(45, 12, 18), FUNDO)
+
+    -- Linha neon sob o header
+    novo("Frame", {
+        Name = "NeonLine",
+        Size = UDim2.new(1, -24, 0, 1),
+        Position = UDim2.new(0, 12, 0, 46),
+        BackgroundColor3 = VERM,
+        BorderSizePixel = 0,
+        Parent = janela,
+    })
+
+    -- Logo/título
+    novo("TextLabel", {
+        Size = UDim2.new(0, 200, 0, 26),
+        Position = UDim2.new(0, 14, 0, 7),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBlack,
+        Text = "RED ONYX",
+        TextColor3 = VERM_C,
+        TextSize = 20,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = header,
+    })
+    novo("TextLabel", {
+        Size = UDim2.new(0, 240, 0, 12),
+        Position = UDim2.new(0, 15, 0, 28),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        Text = cfg.subtitulo or "PROJECT | v1.0",
+        TextColor3 = CIN,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = header,
+    })
+
+    -- Botão fechar
+    local btn_fechar = novo("TextButton", {
+        Size = UDim2.new(0, 26, 0, 26),
+        Position = UDim2.new(1, -34, 0, 10),
+        BackgroundColor3 = VERM_E,
+        Font = Enum.Font.GothamBold,
+        Text = "X",
+        TextColor3 = BRA,
+        TextSize = 12,
+        AutoButtonColor = false,
+        Parent = header,
+    })
+    canto(btn_fechar, 6)
+
+    -- Arrastar janela
+    do
+        local arrastando, pos_inicial, ini_janela = false, nil, nil
+        header.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                arrastando = true
+                pos_inicial = input.Position
+                ini_janela = janela.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        arrastando = false
                     end
-                    -- Novos objetos adicionados DENTRO da GUI do hub
-                    child.DescendantAdded:Connect(function(novo)
-                        aguardar(0.2)
-                        aplicar_tema(novo)
-                    end)
+                end)
+            end
+        end)
+        UserInput.InputChanged:Connect(function(input)
+            if arrastando and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - pos_inicial
+                janela.Position = UDim2.new(ini_janela.X.Scale, ini_janela.X.Offset + delta.X, ini_janela.Y.Scale, ini_janela.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    -- Barra lateral de tabs
+    local coluna_tabs = novo("Frame", {
+        Name = "Tabs",
+        Size = UDim2.new(0, 110, 1, -58),
+        Position = UDim2.new(0, 10, 0, 56),
+        BackgroundTransparency = 1,
+        Parent = janela,
+    })
+    local layout_tabs = novo("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        Parent = coluna_tabs,
+    })
+
+    -- Área de conteúdo
+    local conteudo = novo("Frame", {
+        Name = "Conteudo",
+        Size = UDim2.new(1, -132, 1, -66),
+        Position = UDim2.new(0, 122, 0, 56),
+        BackgroundColor3 = PRETO,
+        BackgroundTransparency = 0.35,
+        BorderSizePixel = 0,
+        Parent = janela,
+    })
+    canto(conteudo, 8)
+
+    -- API da janela
+    local api = {}
+    local abas = {}
+
+    function api.criar_aba(nome)
+        local btn_tab = novo("TextButton", {
+            Size = UDim2.new(1, 0, 0, 28),
+            BackgroundColor3 = CARD,
+            Font = Enum.Font.GothamBold,
+            Text = nome,
+            TextColor3 = CIN,
+            TextSize = 12,
+            AutoButtonColor = false,
+            Parent = coluna_tabs,
+        })
+        canto(btn_tab, 6)
+
+        local pagina = novo("ScrollingFrame", {
+            Name = "Pag_" .. nome,
+            Size = UDim2.new(1, -8, 1, -8),
+            Position = UDim2.new(0, 4, 0, 4),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ScrollBarThickness = 3,
+            ScrollBarImageColor3 = VERM,
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            Visible = false,
+            Parent = conteudo,
+        })
+        local lay = novo("UIListLayout", { Padding = UDim.new(0, 6), Parent = pagina })
+
+        local aba = { btn = btn_tab, pagina = pagina, nome = nome }
+        table.insert(abas, aba)
+
+        btn_tab.MouseButton1Click:Connect(function()
+            for _, a in ipairs(abas) do
+                a.pagina.Visible = false
+                a.btn.TextColor3 = CIN
+                a.btn.BackgroundColor3 = CARD
+            end
+            pagina.Visible = true
+            btn_tab.TextColor3 = VERM_C
+            btn_tab.BackgroundColor3 = PAINEL
+        end)
+
+        if #abas == 1 then
+            pagina.Visible = true
+            btn_tab.TextColor3 = VERM_C
+            btn_tab.BackgroundColor3 = PAINEL
+        end
+
+        -- ---------- componentes da aba ----------
+        local componentes = {}
+
+        function componentes.botao(txt, callback)
+            local btn = novo("TextButton", {
+                Size = UDim2.new(1, -8, 0, 30),
+                BackgroundColor3 = CARD,
+                Font = Enum.Font.GothamBold,
+                Text = txt,
+                TextColor3 = BRA,
+                TextSize = 11,
+                AutoButtonColor = false,
+                Parent = pagina,
+            })
+            canto(btn, 6)
+            novo("UIStroke", { Color = VERM_E, Thickness = 1, Parent = btn })
+            btn.MouseButton1Click:Connect(function()
+                spawn(callback)
+            end)
+            return btn
+        end
+
+        function componentes.toggle(txt, chave_config, padrao)
+            RedOnyxLib.Config[chave_config] = padrao and true or false
+
+            local row = novo("TextButton", {
+                Size = UDim2.new(1, -8, 0, 30),
+                BackgroundColor3 = CARD,
+                Text = "",
+                AutoButtonColor = false,
+                Parent = pagina,
+            })
+            canto(row, 6)
+
+            novo("TextLabel", {
+                Size = UDim2.new(1, -60, 1, 0),
+                Position = UDim2.new(0, 10, 0, 0),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                Text = txt,
+                TextColor3 = BRA,
+                TextSize = 11,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = row,
+            })
+
+            -- Switch futurista
+            local trilho = novo("Frame", {
+                Size = UDim2.new(0, 36, 0, 16),
+                Position = UDim2.new(1, -46, 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = PAINEL,
+                BorderSizePixel = 0,
+                Parent = row,
+            })
+            canto(trilho, 8)
+            local bolinha = novo("Frame", {
+                Size = UDim2.new(0, 12, 0, 12),
+                Position = UDim2.new(0, 2, 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = CIN,
+                BorderSizePixel = 0,
+                Parent = trilho,
+            })
+            canto(trilho, 8)
+            canto(bolinha, 8)
+
+            local ligado = RedOnyxLib.Config[chave_config]
+
+            local function atualizar(instante)
+                if ligado then
+                    trilho.BackgroundColor3 = VERM_E
+                    bolinha.BackgroundColor3 = VERM_C
+                    bolinha:TweenPosition(UDim2.new(1, -16, 0.5, 0), "Out", "Quad", 0.15, true)
+                else
+                    trilho.BackgroundColor3 = PAINEL
+                    bolinha.BackgroundColor3 = CIN
+                    bolinha:TweenPosition(UDim2.new(0, 2, 0.5, 0), "Out", "Quad", 0.15, true)
+                end
+            end
+
+            atualizar(true)
+
+            row.MouseButton1Click:Connect(function()
+                ligado = not ligado
+                RedOnyxLib.Config[chave_config] = ligado
+                atualizar()
+                print("[Red Onyx] " .. txt .. ": " .. (ligado and "ON" or "OFF"))
+            end)
+
+            return row
+        end
+
+        function componentes.label(txt)
+            local l = novo("TextLabel", {
+                Size = UDim2.new(1, -8, 0, 22),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                Text = txt,
+                TextColor3 = CIN,
+                TextSize = 10,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextWrapped = true,
+                Parent = pagina,
+            })
+            return l
+        end
+
+        return componentes
+    end
+
+    btn_fechar.MouseButton1Click:Connect(function()
+        janela.Visible = not janela.Visible
+    end)
+
+    -- Atalho: RightShift mostra/esconde
+    spawn(function()
+        UserInput.InputBegan:Connect(function(input, processado)
+            if processado then return end
+            if input.KeyCode == Enum.KeyCode.RightShift then
+                janela.Visible = not janela.Visible
+            end
+        end)
+    end)
+
+    api.janela = janela
+    return api
+end
+
+-- ============================================================
+-- MÓDULO DE FARM (usa RedOnyxLib.Config)
+-- ============================================================
+local function pegar_hrp()
+    local char = Jogador and Jogador.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function mob_mais_proximo(hrp, distancia_max)
+    local alvo, dist_alvo = nil, math.huge
+    local char = Jogador.Character
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj ~= char then
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            local raiz = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
+            if hum and raiz and hum.Health > 0 then
+                local d = (hrp.Position - raiz.Position).Magnitude
+                if d < dist_alvo then
+                    dist_alvo = d
+                    alvo = raiz
+                end
+            end
+        end
+    end
+    if dist_alvo <= (distancia_max or 300) then
+        return alvo, dist_alvo
+    end
+    return nil, nil
+end
+
+-- ===== AUTO FARM =====
+spawn(function()
+    while true do
+        if RedOnyxLib.Config.AutoFarm then
+            pcall(function()
+                local hrp = pegar_hrp()
+                if not hrp then return end
+                local alvo = mob_mais_proximo(hrp, RedOnyxLib.Config.DistanciaFarm)
+                if alvo then
+                    hrp.CFrame = alvo.CFrame * CFrame.new(0, 8, 4)
+                    local char = Jogador.Character
+                    local ferr = char and char:FindFirstChildOfClass("Tool")
+                    if ferr then pcall(function() ferr:Activate() end) end
                 end
             end)
-        end)
+        end
+        aguardar(RedOnyxLib.Config.AutoFarm and 0.25 or 1)
+    end
+end)
 
-        -- Rede de segurança: pass completo a cada 30s (só objetos NÃO marcados)
-        while true do
-            aguardar(30)
+-- ===== AUTO COLETA + BAÚS =====
+spawn(function()
+    while true do
+        if RedOnyxLib.Config.AutoColeta or RedOnyxLib.Config.AutoBaus then
             pcall(function()
-                for _, gui in ipairs(Core:GetChildren()) do
-                    if gui:IsA("ScreenGui") and gui.Parent and nome_deve_patchear(gui) then
-                        for _, obj in ipairs(gui:GetDescendants()) do
-                            aplicar_tema(obj) -- objetos marcados são ignorados instantaneamente
+                local hrp = pegar_hrp()
+                if not hrp then return end
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if obj:IsA("BasePart") and obj.Transparency < 1 then
+                        local nome = obj.Name:lower()
+                        local quer = false
+                        if RedOnyxLib.Config.AutoBaus and (nome:find("chest") or nome:find("bau")) then quer = true end
+                        if RedOnyxLib.Config.AutoColeta and (obj:FindFirstChild("TouchInterest") or obj:FindFirstChild("ClickDetector")) then quer = true end
+                        if quer then
+                            local d = (hrp.Position - obj.Position).Magnitude
+                            if d < 60 then
+                                hrp.CFrame = CFrame.new(obj.Position + Vector3.new(0, 2, 0))
+                                if firetouchinterest then
+                                    pcall(firetouchinterest, hrp, obj, 0)
+                                    pcall(firetouchinterest, hrp, obj, 1)
+                                end
+                                break -- 1 item por ciclo (leve)
+                            end
                         end
                     end
                 end
             end)
         end
-    end)
-end
-
--- ============================================================
--- KEY: PERSISTÊNCIA EM DISCO
--- ============================================================
-local function salvar_key(chave)
-    pcall(function()
-        if makefolder then pcall(makefolder, "RedOnyx") end
-        writefile(ARQ_KEY, chave)
-    end)
-    pcall(function()
-        if syn and syn.writefile then syn.writefile(ARQ_KEY, chave) end
-    end)
-end
-
-local function carregar_key()
-    local chave = ""
-    pcall(function() chave = readfile(ARQ_KEY) end)
-    if type(chave) ~= "string" or chave == "" then
-        pcall(function()
-            if syn and syn.readfile then chave = syn.readfile(ARQ_KEY) end
-        end)
+        aguardar(0.4)
     end
-    if type(chave) ~= "string" then chave = "" end
-    return chave
-end
+end)
 
-local function deletar_key()
-    pcall(delfile, ARQ_KEY)
-    pcall(function() if syn and syn.delfile then syn.delfile(ARQ_KEY) end end)
-end
-
--- ============================================================
--- DOWNLOAD (com fallback)
--- ============================================================
-local function baixar(url)
-    local dados = ""
-    pcall(function() dados = game:HttpGet(url) end)
-    if type(dados) ~= "string" or dados == "" then
-        local req = (type(syn) == "table" and syn.request) or request or http_request
-        if req then
+-- ===== AUTO QUEST =====
+spawn(function()
+    while true do
+        if RedOnyxLib.Config.AutoQuest then
             pcall(function()
-                local resp = req({ Url = url, Method = "GET" })
-                if resp and resp.Body and #resp.Body > 0 then dados = resp.Body end
+                local hrp = pegar_hrp()
+                if not hrp then return end
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if obj:IsA("ProximityPrompt") and obj.Enabled then
+                        local parte = obj.Parent
+                        if parte and (parte.Position - hrp.Position).Magnitude < 12 then
+                            pcall(fireproximityprompt, obj)
+                            aguardar(0.5)
+                            break
+                        end
+                    end
+                end
             end)
         end
+        aguardar(1)
     end
-    return dados
-end
+end)
 
--- ============================================================
--- AUTO PEGA TUDO: ATIVAR TODAS AS CONFIGS
--- (o QuantumOnyx lê essas flags ao iniciar)
--- ============================================================
-GENV.Settings = GENV.Settings or {}
-local S = GENV.Settings
+-- ===== RESGATAR CÓDIGOS =====
+local CODIGOS = {
+    "KITT_RESET", "SUB2GAMERROBOT_RESET1", "Sub2UncleKizaru",
+    "SUB2GAMERROBOT_EXP1", "15B_BESTBROTHERS",
+    "EASTEREXP", "LIGHTNINGABUSE", "Axiore", "Bluxxy",
+    "Enyu_is_Pro", "JCWK", "Kittgaming", "Magicbus",
+    "Starcodeheo", "StrawHatMaine", "Sub2CaptainMaui",
+    "Sub2Fer999", "Sub2OfficialNoobie", "1lostadmin ",
+    "Sub2Daigrock", "Sub2NoobMaster123", "TantaiGaming",
+    "Fudd10", "Fudd10_v2", "Bignews", "Chandler",
+    "TY_FOR_WATCHING", "GAMER_ROBOT_1M",
+}
 
-local function ativar_tudo()
-    S["Auto Farm Level"]     = true
-    S["Auto Quest"]          = true
-    S["Auto Bones"]          = true
-    S["Auto Elite Hunter"]   = true
-    S["Auto Factory Raid"]   = true
-    S["Auto Pirate Raid"]    = true
-    S["Auto Redeem Codes"]   = true
-    S["Auto Yama"]           = true
-    S["Auto TTK"]            = true
-    S["Auto Tushita"]        = true
-    S["Auto Ghoul"]          = true
-    S["Auto Get Ghoul"]      = true
-    S["Auto CDK"]            = true
-    S["Auto Rengoku"]        = true
-    S["Auto Soul Guitar"]    = true
-    S["Auto Shark Anchor"]   = true
-    S["Auto Rainbow Haki"]   = true
-    S["Auto Swords"]         = true
-    S["Auto Guns"]           = true
-    S["Auto Fighting Style"] = true
-    S["Auto Mastery"]        = true
-    S["Auto Fragment"]       = true
-    S["Auto Ectoplasm"]      = true
-    S["Auto Candy"]          = true
-    S["Auto Chest"]          = true
-    S["Auto Sea Beast"]      = true
-    S["Auto Observation"]    = true
-    S["Auto Buso Haki"]      = true
-    S["Farm Distance"]       = 2500
-    S["Team"]                = "Pirates"
-    print("[Red Onyx Hub] Auto Pega Tudo ativado!")
-end
-
--- ============================================================
--- CARREGAR HUB — SEM MODIFICAR O CÓDIGO (gsub quebrava tudo)
--- ============================================================
-local function carregar_hub(premium, chave)
-    ativar_tudo()
-
-    if premium and chave and chave ~= "" then
-        GENV.script_key = chave
-        salvar_key(chave)
-
-        local codigo = baixar(URL_PREMIUM)
-        if codigo ~= "" then
-            local fn = loadstring(codigo)
-            if fn then
-                local ok, err = pcall(fn)
-                if ok then
-                    print("[Red Onyx Hub] Premium carregado!")
-                    return true, "OK"
-                end
-                warn("[Red Onyx] Premium erro: " .. tostring(err))
-            end
-        end
-        print("[Red Onyx Hub] Premium falhou, caindo para Free...")
+local function resgatar_codigos()
+    local Storage = game:GetService("ReplicatedStorage")
+    local remote = Storage:FindFirstChild("Redeem") or Storage:FindFirstChild("RedeemCode")
+    if not remote then
+        warn("[Red Onyx] Remote de codigos nao encontrado")
+        return 0, false
     end
-
-    local codigo = baixar(URL_FREE)
-    if codigo == "" then return false, "Download falhou (sem internet ou executor bloqueou)" end
-
-    print("[Red Onyx Hub] Baixado " .. #codigo .. " bytes")
-
-    local fn = loadstring(codigo)
-    if not fn then return false, "Falha na compilacao" end
-
-    local ok, err = pcall(fn)
-    if not ok then return false, "Erro na execucao: " .. tostring(err) end
-
-    print("[Red Onyx Hub] Hub carregado!")
-    return true, "OK"
-end
-
--- ============================================================
--- VALIDAR KEY (Luarmor SDK)
--- ============================================================
-local function validar_key(chave, cb_ok, cb_erro)
-    spawn(function()
-        local sdk = baixar("https://sdkapi-public.luarmor.net/library.lua")
-        if sdk == "" then
-            if cb_erro then cb_erro("SDK offline - sem internet") end
-            return
-        end
-        local fn = loadstring(sdk)
-        if not fn then
-            if cb_erro then cb_erro("SDK invalido") end
-            return
-        end
-        local ok_api, api = pcall(fn)
-        if not ok_api or type(api) ~= "table" then
-            if cb_erro then cb_erro("Erro no SDK") end
-            return
-        end
-        api.script_id = SCRIPT_ID
-        local ok_check, res = pcall(function() return api.check_key(chave) end)
-        if ok_check and type(res) == "table" and res.code == "KEY_VALID" then
-            if cb_ok then cb_ok() end
-        else
-            local msg = "Key invalida"
-            if type(res) == "table" and res.message then msg = tostring(res.message) end
-            if cb_erro then cb_erro(msg) end
-        end
-    end)
-end
-
--- ============================================================
--- UI DE KEY
--- ============================================================
-local sg_key_ui = nil -- referência para o patcher ignorar nossa UI
-
-local function criar_ui_real()
-    sg_key_ui = Instance.new("ScreenGui")
-    sg_key_ui.Name = "RedOnyxHubKey"
-    sg_key_ui.IgnoreGuiInset = true
-    sg_key_ui.ResetOnSpawn = false
-
-    local pai_ok = pcall(function() sg_key_ui.Parent = Core end)
-    if not pai_ok then
+    local ok_count = 0
+    for i, cod in ipairs(CODIGOS) do
         pcall(function()
-            if gethui then
-                local hui = gethui()
-                if typeof(hui) == "Instance" then sg_key_ui.Parent = hui end
+            if remote:IsA("RemoteFunction") then
+                remote:InvokeServer(cod)
+            elseif remote:IsA("RemoteEvent") then
+                remote:FireServer(cod)
             end
         end)
+        if i % 5 == 0 then aguardar(0.4) end
+        aguardar(0.08)
     end
-
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 380, 0, 210)
-    card.Position = UDim2.new(0.5, 0, 0.5, 0)
-    card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.BackgroundColor3 = ESC_M
-    card.BorderSizePixel = 0
-    card.Parent = sg_key_ui
-
-    local canto = Instance.new("UICorner")
-    canto.CornerRadius = UDim.new(0, 10)
-    canto.Parent = card
-
-    local borda = Instance.new("UIStroke")
-    borda.Color = VERM
-    borda.Thickness = 2
-    borda.Parent = card
-
-    local tit = Instance.new("TextLabel")
-    tit.Size = UDim2.new(1, 0, 0, 34)
-    tit.Position = UDim2.new(0, 0, 0, 8)
-    tit.BackgroundTransparency = 1
-    tit.Font = Enum.Font.GothamBlack
-    tit.Text = "RED ONYX HUB"
-    tit.TextColor3 = VERM_C
-    tit.TextSize = 22
-    tit.TextXAlignment = Enum.TextXAlignment.Center
-    tit.Parent = card
-
-    local sub = Instance.new("TextLabel")
-    sub.Size = UDim2.new(1, 0, 0, 12)
-    sub.Position = UDim2.new(0, 0, 0, 44)
-    sub.BackgroundTransparency = 1
-    sub.Font = Enum.Font.Gotham
-    sub.Text = "Auto Pega Tudo | Patcher Vermelho e Preto"
-    sub.TextColor3 = CIN
-    sub.TextSize = 10
-    sub.TextXAlignment = Enum.TextXAlignment.Center
-    sub.Parent = card
-
-    local input = Instance.new("TextBox")
-    input.Size = UDim2.new(0, 340, 0, 34)
-    input.Position = UDim2.new(0.5, 0, 0, 68)
-    input.AnchorPoint = Vector2.new(0.5, 0)
-    input.BackgroundColor3 = ESC
-    input.BorderSizePixel = 0
-    input.Font = Enum.Font.Gotham
-    input.PlaceholderText = "Key Premium (opcional)"
-    input.PlaceholderColor3 = CIN
-    input.Text = ""
-    input.TextColor3 = BRA
-    input.TextSize = 12
-    input.ClearTextOnFocus = false
-    input.Parent = card
-
-    local ci = Instance.new("UICorner")
-    ci.CornerRadius = UDim.new(0, 6)
-    ci.Parent = input
-
-    local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -20, 0, 16)
-    status.Position = UDim2.new(0.5, 0, 0, 108)
-    status.AnchorPoint = Vector2.new(0.5, 0)
-    status.BackgroundTransparency = 1
-    status.Font = Enum.Font.Gotham
-    status.Text = ""
-    status.TextColor3 = VERM_C
-    status.TextSize = 10
-    status.TextWrapped = true
-    status.TextXAlignment = Enum.TextXAlignment.Center
-    status.Parent = card
-
-    local function set_status(txt, cor)
-        status.Text = txt
-        if cor then status.TextColor3 = cor end
-    end
-
-    local ocupado = false
-
-    local function criar_btn(posX, cor, txt, cb)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 170, 0, 34)
-        btn.Position = UDim2.new(0, posX, 0, 130)
-        btn.BackgroundColor3 = cor
-        btn.BorderSizePixel = 0
-        btn.Font = Enum.Font.GothamBold
-        btn.Text = txt
-        btn.TextColor3 = BRA
-        btn.TextSize = 11
-        btn.AutoButtonColor = false
-        btn.Parent = card
-
-        local cb2 = Instance.new("UICorner")
-        cb2.CornerRadius = UDim.new(0, 6)
-        cb2.Parent = btn
-
-        btn.MouseButton1Click:Connect(cb)
-        return btn
-    end
-
-    criar_btn(15, VERM_E, "INICIAR FREE", function()
-        if ocupado then return end
-        ocupado = true
-        set_status("Carregando versao Free...", VERM_C)
-        spawn(function()
-            local ok, err = carregar_hub(false, nil)
-            if ok then
-                sg_key_ui:Destroy()
-            else
-                ocupado = false
-                set_status("Erro: " .. tostring(err), VERM)
-            end
-        end)
-    end)
-
-    criar_btn(195, VERM, "USAR KEY", function()
-        if ocupado then return end
-        local chave = input.Text
-        if chave == "" then
-            set_status("Digite a key ou use o Free!", VERM)
-            return
-        end
-        ocupado = true
-        set_status("Validando key...", VERM_C)
-
-        validar_key(chave, function()
-            set_status("Key valida! Salvando e carregando...", VERM_C)
-            aguardar(0.3)
-            local ok, err = carregar_hub(true, chave)
-            if ok then
-                sg_key_ui:Destroy()
-            else
-                ocupado = false
-                set_status("Erro: " .. tostring(err), VERM)
-            end
-        end, function(msg)
-            ocupado = false
-            set_status(msg, VERM)
-            deletar_key() -- key inválida não fica salva
-        end)
-    end)
-
-    -- Botão copiar link da key
-    local btn_link = Instance.new("TextButton")
-    btn_link.Size = UDim2.new(0, 340, 0, 24)
-    btn_link.Position = UDim2.new(0.5, 0, 0, 172)
-    btn_link.AnchorPoint = Vector2.new(0.5, 0)
-    btn_link.BackgroundColor3 = Color3.fromRGB(60, 20, 28)
-    btn_link.BorderSizePixel = 0
-    btn_link.Font = Enum.Font.Gotham
-    btn_link.Text = "Pegar Key (copia o link)"
-    btn_link.TextColor3 = CIN
-    btn_link.TextSize = 10
-    btn_link.AutoButtonColor = false
-    btn_link.Parent = card
-
-    local cl = Instance.new("UICorner")
-    cl.CornerRadius = UDim.new(0, 5)
-    cl.Parent = btn_link
-
-    btn_link.MouseButton1Click:Connect(function()
-        pcall(function() (setclipboard or toclipboard)(LINK_KEY) end)
-        set_status("Link copiado! Cole no navegador.", VERM_C)
-    end)
-end
-
-local function iniciar()
-    -- Key salva? Tenta carregar direto (sem UI)
-    local chave = carregar_key()
-    if chave ~= "" then
-        print("[Red Onyx Hub] Key salva encontrada! Carregando automaticamente...")
-        spawn(function()
-            local ok = carregar_hub(true, chave)
-            if ok then return end
-            -- Key expirou/inválida
-            print("[Red Onyx Hub] Key salva invalida - mostrando UI")
-            deletar_key()
-            criar_ui_real()
-        end)
-    else
-        criar_ui_real()
-    end
+    return #CODIGOS, true
 end
 
 -- ============================================================
--- INICIALIZAÇÃO
+-- MONTAR A INTERFACE
 -- ============================================================
-iniciar_patcher()
+spawn(function()
+    -- Espera o jogador existir (servidor demora às vezes)
+    while not Jogador do
+        aguardar(0.5)
+        Jogador = Jogadores.LocalPlayer
+    end
 
-local ok, err = pcall(iniciar)
-if not ok then
-    warn("[Red Onyx Hub] ERRO CRITICO: " .. tostring(err))
-    -- Fallback: carrega free direto
-    spawn(function()
-        aguardar(2)
-        pcall(function() carregar_hub(false, nil) end)
+    local janela = RedOnyxLib.criar_janela({
+        titulo = "RED ONYX HUB",
+        subtitulo = "PROJECT | Auto Pega Tudo",
+    })
+
+    -- ===== ABA PRINCIPAL =====
+    local principal = janela.criar_aba("Principal")
+
+    principal.label("Funcoes automaticas — ligue o que quiser:")
+
+    principal.toggle("Auto Farm (mobs)", "AutoFarm", false)
+    principal.toggle("Auto Coleta (itens)", "AutoColeta", false)
+    principal.toggle("Auto Baús", "AutoBaus", false)
+    principal.toggle("Auto Quest", "AutoQuest", false)
+
+    principal.botao("RESGATAR TODOS OS CÓDIGOS", function()
+        print("[Red Onyx] Resgatando codigos...")
+        local total, ok = resgatar_codigos()
+        print("[Red Onyx] " .. (ok and ("Codigos enviados: " .. total) or "Remote nao encontrado"))
     end)
-end
 
-print("[Red Onyx Hub] v16 pronto!")
+    -- ===== ABA VELOCIDADE =====
+    local config_aba = janela.criar_aba("Config")
+
+    config_aba.label("Alcance do farm (studs):")
+    config_aba.botao("Alcance: 100 (curto)", function()
+        RedOnyxLib.Config.DistanciaFarm = 100
+        print("[Red Onyx] Alcance: 100")
+    end)
+    config_aba.botao("Alcance: 300 (médio)", function()
+        RedOnyxLib.Config.DistanciaFarm = 300
+        print("[Red Onyx] Alcance: 300")
+    end)
+    config_aba.botao("Alcance: 999 (tudo)", function()
+        RedOnyxLib.Config.DistanciaFarm = 999
+        print("[Red Onyx] Alcance: 999")
+    end)
+
+    config_aba.label("")
+    config_aba.label("Atalho: RightShift mostra/esconde a janela.")
+
+    config_aba.botao("DESATIVAR TUDO", function()
+        RedOnyxLib.Config.AutoFarm = false
+        RedOnyxLib.Config.AutoColeta = false
+        RedOnyxLib.Config.AutoBaus = false
+        RedOnyxLib.Config.AutoQuest = false
+        print("[Red Onyx] Tudo desativado")
+    end)
+
+    print("[Red Onyx Project] Pronto! Use RightShift para abrir/fechar.")
+end)
+
+print("[Red Onyx Project] Carregado!")
