@@ -1,298 +1,341 @@
 -- ============================================================
--- RED ONYX HUB LITE v2 - 100% STANDALONE
--- NADA é baixado | Tudo escrito na mão | Super leve
+-- RED ONYX HUB v16 - COMPLETO + ANTI-TRAVAMENTO
+-- Patcher vermelho/preto funcional | Auto Pega Tudo | Key salva
 -- ============================================================
-print("[Red Onyx Lite] Iniciando...")
+print("[Red Onyx Hub] v16 iniciando...")
 
--- ===== COMPATIBILIDADE =====
+-- ===== COMPAT =====
 local aguardar = (task and task.wait) or wait
 local spawn = (task and task.spawn) or function(f) coroutine.resume(coroutine.create(f)) end
+local GENV = _G
+pcall(function() local ok, e = pcall(getgenv); if ok then GENV = e end end)
 
--- ===== CORES FIXAS (sem cálculo) =====
-local VERM = Color3.fromRGB(200, 30, 45)
+-- ===== PALETA (vermelho e preto) =====
+local VERM   = Color3.fromRGB(200, 30, 45)
 local VERM_C = Color3.fromRGB(240, 80, 90)
-local ESC = Color3.fromRGB(15, 12, 14)
-local ESC_M = Color3.fromRGB(22, 16, 18)
-local BRA = Color3.fromRGB(240, 235, 237)
-local CIN = Color3.fromRGB(150, 140, 142)
+local VERM_E = Color3.fromRGB(130, 15, 28)
+local ESC    = Color3.fromRGB(15, 12, 14)
+local ESC_M  = Color3.fromRGB(22, 16, 18)
+local CIN_M  = Color3.fromRGB(30, 22, 25)
+local BRA    = Color3.fromRGB(240, 235, 237)
+local CIN    = Color3.fromRGB(150, 140, 142)
 
--- ===== VARIÁVEIS GLOBAIS =====
-local Jogadores = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Jogador = Jogadores.LocalPlayer
+-- ===== CONSTANTES =====
+local SCRIPT_ID = "0ae9fe4cf963e3a13d25eed0e2ce5940"
+local URL_FREE = "https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"
+local URL_PREMIUM = "https://api.luarmor.net/files/v4/loaders/" .. SCRIPT_ID .. ".lua"
+local LINK_KEY = "https://ads.luarmor.net/get_key?for=Quantum_Onyx_Keysytem-NdUqNPMGBobv"
+local ARQ_KEY = "RedOnyxKey.txt"
+local TAG = "ROXThemed" -- atributo que marca objetos já tematizados (ANTI-LOOP)
+
 local Core = game:GetService("CoreGui")
-
--- Flags de controle (desliga as funções)
-local Ativo = {
-    Farm = false,
-    Bau = false,
-    Coleta = false,
-    Quest = false,
-    Codigos = false,
-}
+local Jogadores = game:GetService("Players")
+local Jogador = Jogadores.LocalPlayer
 
 -- ============================================================
--- PATCHER MÍNIMO (só troca texto, SEM conexões de evento)
+-- PATCHER VERMELHO/PRETO — FUNCIONAL E SEM TRAVAR
+-- Estratégia: marca cada objeto com atributo. Objeto marcado
+-- NUNCA é processado de novo. Isso elimina o loop de feedback
+-- com o sistema de tema do hub (causa real do freeze).
 -- ============================================================
-local function patcher_minimo()
+local patcher_habilitado = true
+
+local function aplicar_tema(obj)
+    if not patcher_habilitado then return end
+    -- ANTI-LOOP: se já foi tematizado, ignora. Sem isso = repaint infinito = freeze
+    local ok, ja_feito = pcall(function() return obj:GetAttribute(TAG) end)
+    if ok and ja_feito then return end
+
+    pcall(function()
+        obj:SetAttribute(TAG, true)
+
+        if obj:IsA("GuiObject") then
+            local bg = obj.BackgroundColor3
+            local lum = bg.R * 0.299 + bg.G * 0.587 + bg.B * 0.114
+            if lum < 0.15 then obj.BackgroundColor3 = ESC
+            elseif lum < 0.25 then obj.BackgroundColor3 = ESC_M
+            elseif lum < 0.35 then obj.BackgroundColor3 = CIN_M
+            else obj.BackgroundColor3 = Color3.fromRGB(42, 30, 35) end
+            obj.BorderColor3 = VERM_E
+        end
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            obj.TextColor3 = BRA
+            local t = obj.Text
+            if type(t) == "string" and t ~= "" then
+                local tl = t:lower()
+                if tl:find("quantum") or tl:find("kaitun") or tl:find("k https") then
+                    obj.Text = t:gsub("[Qq]uantum%s*[Oo]nyx", "Red Onyx Hub"):gsub("[Kk]aitun", "Red Onyx Hub")
+                end
+            end
+        end
+        if obj:IsA("TextBox") then
+            obj.TextColor3 = BRA
+            obj.PlaceholderColor3 = CIN
+        end
+        if obj:IsA("UIStroke") then
+            obj.Color = VERM
+        end
+        if obj:IsA("ScrollingFrame") then
+            obj.ScrollBarImageColor3 = VERM_C
+        end
+        if obj:IsA("UIGradient") then
+            obj.Color = ColorSequence.new(ESC_M, VERM_E)
+        end
+        -- Imagens: NÃO mexemos em ImageColor3 para não escurecer logos
+    end)
+end
+
+-- GUIs que o patcher DEVE ignorar (nossa UI e GUIs do jogo)
+local gui_ignorada = {}
+
+local function nome_deve_patchear(gui)
+    local n = gui.Name:lower()
+    if gui_ignorada[gui] then return false end
+    -- Só tematiza GUIs que parecem ser do hub
+    return n:find("hub") or n:find("quantum") or n:find("onyx") or n:find("kaitun")
+        or n:find("ui", 1, true) or n:find("lib", 1, true) or n:find("red")
+end
+
+-- Detecção de novas GUIs por evento (leve) + pass único com debounce
+local function iniciar_patcher()
     spawn(function()
         aguardar(2)
+        -- Pass inicial: tematiza GUIs do hub que já existem
+        pcall(function()
+            for _, gui in ipairs(Core:GetChildren()) do
+                if gui:IsA("ScreenGui") and nome_deve_patchear(gui) then
+                    for _, obj in ipairs(gui:GetDescendants()) do
+                        aplicar_tema(obj)
+                    end
+                end
+            end
+        end)
+
+        -- Evento: nova GUI/objeto aparece → tematiza (com debounce leve)
+        pcall(function()
+            Core.ChildAdded:Connect(function(child)
+                aguardar(1) -- espera a GUI terminar de construir
+                if child:IsA("ScreenGui") and nome_deve_patchear(child) then
+                    for _, obj in ipairs(child:GetDescendants()) do
+                        aplicar_tema(obj)
+                    end
+                    -- Novos objetos adicionados DENTRO da GUI do hub
+                    child.DescendantAdded:Connect(function(novo)
+                        aguardar(0.2)
+                        aplicar_tema(novo)
+                    end)
+                end
+            end)
+        end)
+
+        -- Rede de segurança: pass completo a cada 30s (só objetos NÃO marcados)
         while true do
+            aguardar(30)
             pcall(function()
                 for _, gui in ipairs(Core:GetChildren()) do
-                    if gui:IsA("ScreenGui") then
+                    if gui:IsA("ScreenGui") and gui.Parent and nome_deve_patchear(gui) then
                         for _, obj in ipairs(gui:GetDescendants()) do
-                            if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and not obj:IsA("TextBox") then
-                                local txt = obj.Text
-                                if type(txt) == "string" and txt ~= "" then
-                                    local tl = txt:lower()
-                                    if tl:find("quantum") or tl:find("onyx") or tl:find("kaitun") then
-                                        obj.Text = "Red Onyx Hub"
-                                    end
-                                end
-                                -- Aplica cor vermelha em textos
-                                obj.TextColor3 = VERM_C
-                            end
-                            if obj:IsA("GuiObject") then
-                                obj.BackgroundColor3 = ESC_M
-                                obj.BorderColor3 = VERM
-                            end
-                            if obj:IsA("UIStroke") then
-                                obj.Color = VERM
-                            end
+                            aplicar_tema(obj) -- objetos marcados são ignorados instantaneamente
                         end
                     end
                 end
             end)
-            aguardar(5) -- Só verifica a cada 5 segundos
         end
     end)
 end
 
 -- ============================================================
--- FUNÇÕES DE AUTO FARM (leves, sem dependência externa)
+-- KEY: PERSISTÊNCIA EM DISCO
 -- ============================================================
-
--- Auto Farm Nível: anda até mobs e ataca
-local function iniciar_farm()
-    Ativo.Farm = true
-    spawn(function()
-        while Ativo.Farm do
-            aguardar(0.3)
-            pcall(function()
-                if not Jogador or not Jogador.Character then return end
-                local char = Jogador.Character
-                local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-                if not hrp then return end
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                if not hum or hum.Health <= 0 then return end
-
-                -- Procura mob mais próximo
-                local alvo = nil
-                local distMin = math.huge
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    if obj:IsA("Model") and obj ~= char then
-                        local mobHum = obj:FindFirstChildOfClass("Humanoid")
-                        local mobHrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
-                        if mobHum and mobHrp and mobHum.Health > 0 then
-                            local dist = (hrp.Position - mobHrp.Position).Magnitude
-                            if dist < distMin and dist < 150 then -- Só considera até 150 studs
-                                distMin = dist
-                                alvo = mobHrp
-                            end
-                        end
-                    end
-                end
-
-                if alvo and distMin < 150 then
-                    -- Teleporta pra perto do mob
-                    hrp.CFrame = alvo.CFrame * CFrame.new(0, 0, 4 + math.random() * 2)
-
-                    -- Usa ferramenta se tiver
-                    local tool = char:FindFirstChildOfClass("Tool") or char:FindFirstChildOfClass("HopperBin")
-                    if tool then
-                        pcall(function() tool:Activate() end)
-                    end
-
-                    -- Pula pra crítico
-                    if hum:GetState() ~= Enum.HumanoidStateType.Jumping then
-                        pcall(function() hum.Jump = true end)
-                    end
-                end
-            end)
-        end
+local function salvar_key(chave)
+    pcall(function()
+        if makefolder then pcall(makefolder, "RedOnyx") end
+        writefile(ARQ_KEY, chave)
+    end)
+    pcall(function()
+        if syn and syn.writefile then syn.writefile(ARQ_KEY, chave) end
     end)
 end
 
--- Auto Coleta: pega fragmentos, ectoplasma, doces, ossos
-local function iniciar_coleta()
-    Ativo.Coleta = true
-    spawn(function()
-        while Ativo.Coleta do
-            aguardar(0.5)
-            pcall(function()
-                if not Jogador or not Jogador.Character then return end
-                local hrp = Jogador.Character:FindFirstChild("HumanoidRootPart") or Jogador.Character:FindFirstChild("Torso")
-                if not hrp then return end
-
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    if obj:IsA("BasePart") and obj.Transparency < 1 and obj.CanCollide == false then
-                        local nome = obj.Name:lower()
-                        local pegar = false
-
-                        if nome:find("fragment") or nome:find("fragmento") then pegar = true end
-                        if nome:find("ectoplasm") or nome:find("ectoplasma") then pegar = true end
-                        if nome:find("candy") or nome:find("doce") or nome:find("bone") or nome:find("osso") then pegar = true end
-                        if nome:find("chest") or nome:find("bau") or nome:find("baú") then pegar = true end
-                        -- Pega qualquer item coletável (frutas, etc)
-                        if obj:FindFirstChild("TouchInterest") or obj:FindFirstChild("ClickDetector") then pegar = true end
-
-                        if pegar then
-                            local dist = (hrp.Position - obj.Position).Magnitude
-                            if dist < 30 then
-                                hrp.CFrame = CFrame.new(obj.Position + Vector3.new(0, 2, 0))
-                                aguardar(0.05)
-                                firetouchinterest(hrp, obj, 0)
-                                aguardar(0.05)
-                                firetouchinterest(hrp, obj, 1)
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-end
-
--- Auto Quest: procura NPCs com quest
-local function iniciar_quest()
-    Ativo.Quest = true
-    spawn(function()
-        while Ativo.Quest do
-            aguardar(2)
-            pcall(function()
-                if not Jogador or not Jogador.Character then return end
-                local hrp = Jogador.Character:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    local nome = obj.Name:lower()
-                    if obj:IsA("Model") and (nome:find("npc") or nome:find("quest") or nome:find("merchant") or nome:find("vendedor")) then
-                        local head = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart")
-                        if head then
-                            local dist = (hrp.Position - head.Position).Magnitude
-                            if dist < 15 then
-                                -- Interage com o NPC
-                                local pp = head:FindFirstChildWhichIsA("ProximityPrompt")
-                                if pp then
-                                    fireproximityprompt(pp)
-                                else
-                                    -- Tenta clicar
-                                    local cd = head:FindFirstChildWhichIsA("ClickDetector")
-                                    if cd then
-                                        fireclickdetector(cd)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-end
-
--- Auto Códigos: resgata códigos
-local function iniciar_codigos()
-    Ativo.Codigos = true
-    spawn(function()
-        aguardar(3) -- Aguarda o jogo carregar
+local function carregar_key()
+    local chave = ""
+    pcall(function() chave = readfile(ARQ_KEY) end)
+    if type(chave) ~= "string" or chave == "" then
         pcall(function()
-            if not Jogador then return end
-
-            local Storage = game:GetService("ReplicatedStorage")
-            local remote = Storage:FindFirstChild("Redeem") or Storage:FindFirstChild("RedeemCode")
-
-            if not remote then
-                -- Procura em outros lugares
-                remote = Jogador:FindFirstChild("Redeem") or Jogador:FindFirstChild("RedeemCode")
-            end
-
-            if not remote then
-                print("[Red Onyx Lite] Remote de codigos não encontrado")
-                Ativo.Codigos = false
-                return
-            end
-
-            local codigos = {
-                "KITT_RESET", "SUB2GAMERROBOT_RESET1", "Sub2UncleKizaru",
-                "SUB2GAMERROBOT_EXP1", "15B_BESTBROTHERS",
-                "EASTEREXP", "LIGHTNINGABUSE", "Axiore", "Bluxxy",
-                "Enyu_is_Pro", "JCWK", "Kittgaming", "Magicbus",
-                "Starcodeheo", "StrawHatMaine", "Sub2CaptainMaui",
-                "Sub2Fer999", "Sub2OfficialNoobie", "1lostadmin ",
-                "Sub2Daigrock", "Sub2NoobMaster123", "TantaiGaming",
-                "Fudd10", "Fudd10_v2", "Bignews", "Chandler",
-                "TY_FOR_WATCHING", "GAMER_ROBOT_1M",
-            }
-
-            local resgatados = 0
-            for i, cod in ipairs(codigos) do
-                local ok = pcall(function()
-                    if remote:IsA("RemoteFunction") then
-                        remote:InvokeServer(cod)
-                    elseif remote:IsA("RemoteEvent") then
-                        remote:FireServer(cod)
-                    end
-                end)
-                if ok then resgatados = resgatados + 1 end
-                if i % 5 == 0 then aguardar(0.3) end
-                aguardar(0.05)
-            end
-            print("[Red Onyx Lite] Codigos resgatados: " .. resgatados .. "/" .. #codigos)
-            Ativo.Codigos = false
+            if syn and syn.readfile then chave = syn.readfile(ARQ_KEY) end
         end)
+    end
+    if type(chave) ~= "string" then chave = "" end
+    return chave
+end
+
+local function deletar_key()
+    pcall(delfile, ARQ_KEY)
+    pcall(function() if syn and syn.delfile then syn.delfile(ARQ_KEY) end end)
+end
+
+-- ============================================================
+-- DOWNLOAD (com fallback)
+-- ============================================================
+local function baixar(url)
+    local dados = ""
+    pcall(function() dados = game:HttpGet(url) end)
+    if type(dados) ~= "string" or dados == "" then
+        local req = (type(syn) == "table" and syn.request) or request or http_request
+        if req then
+            pcall(function()
+                local resp = req({ Url = url, Method = "GET" })
+                if resp and resp.Body and #resp.Body > 0 then dados = resp.Body end
+            end)
+        end
+    end
+    return dados
+end
+
+-- ============================================================
+-- AUTO PEGA TUDO: ATIVAR TODAS AS CONFIGS
+-- (o QuantumOnyx lê essas flags ao iniciar)
+-- ============================================================
+GENV.Settings = GENV.Settings or {}
+local S = GENV.Settings
+
+local function ativar_tudo()
+    S["Auto Farm Level"]     = true
+    S["Auto Quest"]          = true
+    S["Auto Bones"]          = true
+    S["Auto Elite Hunter"]   = true
+    S["Auto Factory Raid"]   = true
+    S["Auto Pirate Raid"]    = true
+    S["Auto Redeem Codes"]   = true
+    S["Auto Yama"]           = true
+    S["Auto TTK"]            = true
+    S["Auto Tushita"]        = true
+    S["Auto Ghoul"]          = true
+    S["Auto Get Ghoul"]      = true
+    S["Auto CDK"]            = true
+    S["Auto Rengoku"]        = true
+    S["Auto Soul Guitar"]    = true
+    S["Auto Shark Anchor"]   = true
+    S["Auto Rainbow Haki"]   = true
+    S["Auto Swords"]         = true
+    S["Auto Guns"]           = true
+    S["Auto Fighting Style"] = true
+    S["Auto Mastery"]        = true
+    S["Auto Fragment"]       = true
+    S["Auto Ectoplasm"]      = true
+    S["Auto Candy"]          = true
+    S["Auto Chest"]          = true
+    S["Auto Sea Beast"]      = true
+    S["Auto Observation"]    = true
+    S["Auto Buso Haki"]      = true
+    S["Farm Distance"]       = 2500
+    S["Team"]                = "Pirates"
+    print("[Red Onyx Hub] Auto Pega Tudo ativado!")
+end
+
+-- ============================================================
+-- CARREGAR HUB — SEM MODIFICAR O CÓDIGO (gsub quebrava tudo)
+-- ============================================================
+local function carregar_hub(premium, chave)
+    ativar_tudo()
+
+    if premium and chave and chave ~= "" then
+        GENV.script_key = chave
+        salvar_key(chave)
+
+        local codigo = baixar(URL_PREMIUM)
+        if codigo ~= "" then
+            local fn = loadstring(codigo)
+            if fn then
+                local ok, err = pcall(fn)
+                if ok then
+                    print("[Red Onyx Hub] Premium carregado!")
+                    return true, "OK"
+                end
+                warn("[Red Onyx] Premium erro: " .. tostring(err))
+            end
+        end
+        print("[Red Onyx Hub] Premium falhou, caindo para Free...")
+    end
+
+    local codigo = baixar(URL_FREE)
+    if codigo == "" then return false, "Download falhou (sem internet ou executor bloqueou)" end
+
+    print("[Red Onyx Hub] Baixado " .. #codigo .. " bytes")
+
+    local fn = loadstring(codigo)
+    if not fn then return false, "Falha na compilacao" end
+
+    local ok, err = pcall(fn)
+    if not ok then return false, "Erro na execucao: " .. tostring(err) end
+
+    print("[Red Onyx Hub] Hub carregado!")
+    return true, "OK"
+end
+
+-- ============================================================
+-- VALIDAR KEY (Luarmor SDK)
+-- ============================================================
+local function validar_key(chave, cb_ok, cb_erro)
+    spawn(function()
+        local sdk = baixar("https://sdkapi-public.luarmor.net/library.lua")
+        if sdk == "" then
+            if cb_erro then cb_erro("SDK offline - sem internet") end
+            return
+        end
+        local fn = loadstring(sdk)
+        if not fn then
+            if cb_erro then cb_erro("SDK invalido") end
+            return
+        end
+        local ok_api, api = pcall(fn)
+        if not ok_api or type(api) ~= "table" then
+            if cb_erro then cb_erro("Erro no SDK") end
+            return
+        end
+        api.script_id = SCRIPT_ID
+        local ok_check, res = pcall(function() return api.check_key(chave) end)
+        if ok_check and type(res) == "table" and res.code == "KEY_VALID" then
+            if cb_ok then cb_ok() end
+        else
+            local msg = "Key invalida"
+            if type(res) == "table" and res.message then msg = tostring(res.message) end
+            if cb_erro then cb_erro(msg) end
+        end
     end)
 end
 
--- Parar tudo
-local function parar_tudo()
-    Ativo.Farm = false
-    Ativo.Bau = false
-    Ativo.Coleta = false
-    Ativo.Quest = false
-    Ativo.Codigos = false
-    print("[Red Onyx Lite] Todas as funcoes paradas")
-end
-
 -- ============================================================
--- UI SUPER LEVE
+-- UI DE KEY
 -- ============================================================
-local function criar_ui()
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "RedOnyxLite"
-    sg.IgnoreGuiInset = true
-    sg.ResetOnSpawn = false
+local sg_key_ui = nil -- referência para o patcher ignorar nossa UI
 
-    local pai_ok = pcall(function() sg.Parent = Core end)
+local function criar_ui_real()
+    sg_key_ui = Instance.new("ScreenGui")
+    sg_key_ui.Name = "RedOnyxHubKey"
+    sg_key_ui.IgnoreGuiInset = true
+    sg_key_ui.ResetOnSpawn = false
+
+    local pai_ok = pcall(function() sg_key_ui.Parent = Core end)
     if not pai_ok then
         pcall(function()
-            local hui = gethui()
-            if typeof(hui) == "Instance" then sg.Parent = hui end
+            if gethui then
+                local hui = gethui()
+                if typeof(hui) == "Instance" then sg_key_ui.Parent = hui end
+            end
         end)
     end
 
-    -- Card
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 280, 0, 260)
+    card.Size = UDim2.new(0, 380, 0, 210)
     card.Position = UDim2.new(0.5, 0, 0.5, 0)
     card.AnchorPoint = Vector2.new(0.5, 0.5)
     card.BackgroundColor3 = ESC_M
     card.BorderSizePixel = 0
-    card.Parent = sg
+    card.Parent = sg_key_ui
 
     local canto = Instance.new("UICorner")
-    canto.CornerRadius = UDim.new(0, 8)
+    canto.CornerRadius = UDim.new(0, 10)
     canto.Parent = card
 
     local borda = Instance.new("UIStroke")
@@ -300,41 +343,71 @@ local function criar_ui()
     borda.Thickness = 2
     borda.Parent = card
 
-    -- Título
     local tit = Instance.new("TextLabel")
-    tit.Size = UDim2.new(1, 0, 0, 30)
-    tit.Position = UDim2.new(0, 0, 0, 6)
+    tit.Size = UDim2.new(1, 0, 0, 34)
+    tit.Position = UDim2.new(0, 0, 0, 8)
     tit.BackgroundTransparency = 1
     tit.Font = Enum.Font.GothamBlack
-    tit.Text = "RED ONYX LITE"
+    tit.Text = "RED ONYX HUB"
     tit.TextColor3 = VERM_C
-    tit.TextSize = 18
+    tit.TextSize = 22
     tit.TextXAlignment = Enum.TextXAlignment.Center
     tit.Parent = card
 
-    -- Status geral
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, 0, 0, 12)
+    sub.Position = UDim2.new(0, 0, 0, 44)
+    sub.BackgroundTransparency = 1
+    sub.Font = Enum.Font.Gotham
+    sub.Text = "Auto Pega Tudo | Patcher Vermelho e Preto"
+    sub.TextColor3 = CIN
+    sub.TextSize = 10
+    sub.TextXAlignment = Enum.TextXAlignment.Center
+    sub.Parent = card
+
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0, 340, 0, 34)
+    input.Position = UDim2.new(0.5, 0, 0, 68)
+    input.AnchorPoint = Vector2.new(0.5, 0)
+    input.BackgroundColor3 = ESC
+    input.BorderSizePixel = 0
+    input.Font = Enum.Font.Gotham
+    input.PlaceholderText = "Key Premium (opcional)"
+    input.PlaceholderColor3 = CIN
+    input.Text = ""
+    input.TextColor3 = BRA
+    input.TextSize = 12
+    input.ClearTextOnFocus = false
+    input.Parent = card
+
+    local ci = Instance.new("UICorner")
+    ci.CornerRadius = UDim.new(0, 6)
+    ci.Parent = input
+
     local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -10, 0, 14)
-    status.Position = UDim2.new(0.5, 0, 0, 36)
+    status.Size = UDim2.new(1, -20, 0, 16)
+    status.Position = UDim2.new(0.5, 0, 0, 108)
     status.AnchorPoint = Vector2.new(0.5, 0)
     status.BackgroundTransparency = 1
     status.Font = Enum.Font.Gotham
-    status.Text = "Clique para iniciar"
-    status.TextColor3 = CIN
+    status.Text = ""
+    status.TextColor3 = VERM_C
     status.TextSize = 10
+    status.TextWrapped = true
     status.TextXAlignment = Enum.TextXAlignment.Center
     status.Parent = card
 
-    local function set_status(txt)
+    local function set_status(txt, cor)
         status.Text = txt
+        if cor then status.TextColor3 = cor end
     end
 
-    -- Botões
-    local function criar_btn(posY, cor, txt, cb)
+    local ocupado = false
+
+    local function criar_btn(posX, cor, txt, cb)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 240, 0, 28)
-        btn.Position = UDim2.new(0.5, 0, 0, posY)
-        btn.AnchorPoint = Vector2.new(0.5, 0)
+        btn.Size = UDim2.new(0, 170, 0, 34)
+        btn.Position = UDim2.new(0, posX, 0, 130)
         btn.BackgroundColor3 = cor
         btn.BorderSizePixel = 0
         btn.Font = Enum.Font.GothamBold
@@ -345,102 +418,110 @@ local function criar_ui()
         btn.Parent = card
 
         local cb2 = Instance.new("UICorner")
-        cb2.CornerRadius = UDim.new(0, 5)
+        cb2.CornerRadius = UDim.new(0, 6)
         cb2.Parent = btn
 
-        btn.MouseButton1Click:Connect(function()
-            pcall(cb)
-        end)
+        btn.MouseButton1Click:Connect(cb)
         return btn
     end
 
-    local rodando = false
-
-    criar_btn(60, VERM, "INICIAR TUDO", function()
-        if rodando then
-            set_status("Já está rodando!")
-            return
-        end
-        rodando = true
-        set_status("Iniciando todas as funções...")
-
-        iniciar_farm()
-        aguardar(0.1)
-        iniciar_coleta()
-        aguardar(0.1)
-        iniciar_quest()
-        aguardar(0.1)
-        iniciar_codigos()
-
-        set_status("Tudo ativo! Farm + Coleta + Quest + Códigos")
-        print("[Red Onyx Lite] Todas as funções iniciadas!")
-    end)
-
-    criar_btn(95, Color3.fromRGB(80, 20, 28), "PARAR TUDO", function()
-        parar_tudo()
-        rodando = false
-        set_status("Parado. Clique em Iniciar para voltar")
-    end)
-
-    criar_btn(145, VERM, "RESGATAR CÓDIGOS", function()
-        set_status("Resgatando códigos...")
+    criar_btn(15, VERM_E, "INICIAR FREE", function()
+        if ocupado then return end
+        ocupado = true
+        set_status("Carregando versao Free...", VERM_C)
         spawn(function()
-            iniciar_codigos()
-            aguardar(10)
-            set_status("Códigos processados!")
+            local ok, err = carregar_hub(false, nil)
+            if ok then
+                sg_key_ui:Destroy()
+            else
+                ocupado = false
+                set_status("Erro: " .. tostring(err), VERM)
+            end
         end)
     end)
 
-    criar_btn(180, Color3.fromRGB(60, 20, 28), "FECHAR UI", function()
-        parar_tudo()
-        sg:Destroy()
+    criar_btn(195, VERM, "USAR KEY", function()
+        if ocupado then return end
+        local chave = input.Text
+        if chave == "" then
+            set_status("Digite a key ou use o Free!", VERM)
+            return
+        end
+        ocupado = true
+        set_status("Validando key...", VERM_C)
+
+        validar_key(chave, function()
+            set_status("Key valida! Salvando e carregando...", VERM_C)
+            aguardar(0.3)
+            local ok, err = carregar_hub(true, chave)
+            if ok then
+                sg_key_ui:Destroy()
+            else
+                ocupado = false
+                set_status("Erro: " .. tostring(err), VERM)
+            end
+        end, function(msg)
+            ocupado = false
+            set_status(msg, VERM)
+            deletar_key() -- key inválida não fica salva
+        end)
     end)
 
-    -- Info
-    local info = Instance.new("TextLabel")
-    info.Size = UDim2.new(1, -10, 0, 14)
-    info.Position = UDim2.new(0.5, 0, 1, -18)
-    info.AnchorPoint = Vector2.new(0.5, 0)
-    info.BackgroundTransparency = 1
-    info.Font = Enum.Font.Gotham
-    info.Text = "Zero download | Ultra leve | ESC para fechar"
-    info.TextColor3 = Color3.fromRGB(90, 85, 87)
-    info.TextSize = 9
-    info.TextXAlignment = Enum.TextXAlignment.Center
-    info.Parent = card
+    -- Botão copiar link da key
+    local btn_link = Instance.new("TextButton")
+    btn_link.Size = UDim2.new(0, 340, 0, 24)
+    btn_link.Position = UDim2.new(0.5, 0, 0, 172)
+    btn_link.AnchorPoint = Vector2.new(0.5, 0)
+    btn_link.BackgroundColor3 = Color3.fromRGB(60, 20, 28)
+    btn_link.BorderSizePixel = 0
+    btn_link.Font = Enum.Font.Gotham
+    btn_link.Text = "Pegar Key (copia o link)"
+    btn_link.TextColor3 = CIN
+    btn_link.TextSize = 10
+    btn_link.AutoButtonColor = false
+    btn_link.Parent = card
 
-    -- Fechar com ESC
-    spawn(function()
-        aguardar(0.5)
-        local cInp = game:GetService("ContextActionService")
-        cInp:BindActionAt("FecharRedOnyxLite", function()
-            parar_tudo()
-            sg:Destroy()
-        end, false, Enum.KeyCode.Escape)
+    local cl = Instance.new("UICorner")
+    cl.CornerRadius = UDim.new(0, 5)
+    cl.Parent = btn_link
+
+    btn_link.MouseButton1Click:Connect(function()
+        pcall(function() (setclipboard or toclipboard)(LINK_KEY) end)
+        set_status("Link copiado! Cole no navegador.", VERM_C)
     end)
 end
 
--- ============================================================
--- INICIAR
--- ============================================================
+local function iniciar()
+    -- Key salva? Tenta carregar direto (sem UI)
+    local chave = carregar_key()
+    if chave ~= "" then
+        print("[Red Onyx Hub] Key salva encontrada! Carregando automaticamente...")
+        spawn(function()
+            local ok = carregar_hub(true, chave)
+            if ok then return end
+            -- Key expirou/inválida
+            print("[Red Onyx Hub] Key salva invalida - mostrando UI")
+            deletar_key()
+            criar_ui_real()
+        end)
+    else
+        criar_ui_real()
+    end
+end
 
--- Patcher mínimo (só texto, a cada 5s)
-patcher_minimo()
+-- ============================================================
+-- INICIALIZAÇÃO
+-- ============================================================
+iniciar_patcher()
 
--- UI
-local ok, err = pcall(criar_ui)
+local ok, err = pcall(iniciar)
 if not ok then
-    warn("[Red Onyx Lite] ERRO NA UI: " .. tostring(err))
-
-    -- Fallback: inicia direto sem UI
+    warn("[Red Onyx Hub] ERRO CRITICO: " .. tostring(err))
+    -- Fallback: carrega free direto
     spawn(function()
-        aguardar(3)
-        iniciar_farm()
-        iniciar_coleta()
-        iniciar_quest()
-        aguardar(5)
-        iniciar_codigos()
+        aguardar(2)
+        pcall(function() carregar_hub(false, nil) end)
     end)
 end
 
-print("[Red Onyx Lite] Versao LITE - sem travamentos!")
+print("[Red Onyx Hub] v16 pronto!")
